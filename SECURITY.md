@@ -13,8 +13,15 @@ against the newest release before reporting.
 
 Please **do not open a public issue** for a suspected vulnerability.
 
-Use GitHub's private vulnerability reporting on the repository
-(**Security → Report a vulnerability**) or email **ivanm12453@gmail.com**.
+Use the project's private reporting channel:
+
+- **GitLab (canonical):** open a **confidential** issue at
+  <https://gitlab.com/ivanm12453/WorstImageFormat/-/issues/new> by checking
+  *This issue is confidential*.
+- **GitHub mirror:** use **Security → Report a vulnerability** on
+  <https://github.com/ivanmj124/WorstImageFormat> if private vulnerability
+  reporting is enabled.
+- **Email:** <ivanm12453@gmail.com>.
 
 Include, when possible:
 
