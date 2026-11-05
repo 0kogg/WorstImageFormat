@@ -959,6 +959,10 @@ void __msan_print_shadow(const volatile void *x, size_t size);
  * include the header file... */
 #include <stddef.h>  /* size_t */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Marks a memory region (<c>[addr, addr+size)</c>) as unaddressable.
  *
@@ -989,6 +993,10 @@ void __asan_poison_memory_region(void const volatile *addr, size_t size);
  * \param addr Start of memory region.
  * \param size Size of memory region. */
 void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+
+#ifdef __cplusplus
+}
+#endif
 #endif
 
 #endif /* ZSTD_COMPILER_H */
