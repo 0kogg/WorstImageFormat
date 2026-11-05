@@ -317,7 +317,7 @@ def main(argv=None):
         return args.handler(args)
     except (OSError, TypeError, ValueError) as error:
         print(f"wimf: {error}", file=sys.stderr)
-        print("Report reproducible bugs: https://github.com/benchware/WorstImageFormat/issues", file=sys.stderr)
+        print("Report reproducible bugs: https://gitlab.com/ivanm12453/WorstImageFormat/-/issues", file=sys.stderr)
         return 2
 
 

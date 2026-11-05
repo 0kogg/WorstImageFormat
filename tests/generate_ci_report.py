@@ -259,7 +259,7 @@ def main():
     }
     (args.output / "metrics.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
 
-    repository = os.environ.get("GITHUB_REPOSITORY", "benchware/WorstImageFormat")
+    repository = os.environ.get("GITHUB_REPOSITORY", "ivanmj124/WorstImageFormat")
     sha = os.environ.get("GITHUB_SHA", "main")
     sections = [fixture_summary(slug, fixture, repository, sha) for slug, fixture in report["fixtures"].items()]
     summary = f"""## WIMF visual codec report (WIM{args.format})

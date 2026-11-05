@@ -18,7 +18,7 @@ from .studio_model import EncodeSettings, JobController, StudioDocument
 
 MODE_COLORS = {"raw": "#9aa0a6", "predictive": "#34a853", "palette": "#fbbc04", "wavelet": "#4285f4"}
 RECENT_FILE = Path.home() / ".wimf-studio-recent.json"
-ISSUES_URL = "https://github.com/benchware/WorstImageFormat/issues/new/choose"
+ISSUES_URL = "https://gitlab.com/ivanm12453/WorstImageFormat/-/issues/new"
 
 
 def _display_array(array):

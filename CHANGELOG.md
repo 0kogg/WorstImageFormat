@@ -2,6 +2,22 @@
 
 All notable WIMF changes are recorded here. The project follows semantic versioning for the Python package; container compatibility is documented separately.
 
+## Unreleased
+
+### Changed
+
+- README now documents WIM3 as the default container, includes updated
+  highlights and limitations, lists `format_version` as `1`/`2`/`3` with a
+  default of `3`, and adds a WIM3 compatibility column.
+- Added a documentation index at `docs/README.md`.
+- Added `CONTRIBUTING.md`, `SECURITY.md`, a pull request template, and
+  `.gitattributes` for consistent line endings and language detection.
+- Package metadata now points at the current repository and adds keywords.
+
+### Fixed
+
+- `wimf.egg-info/` is no longer tracked; build and test artifacts are ignored.
+
 ## 3.0.0 - 2026-08-26
 
 - WIM3 (oxygen) is now the default container. `wimf.encode` and

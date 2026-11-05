@@ -9,8 +9,9 @@ must not be represented as signed releases.
 ## Scope
 
 Only binaries built from the official
-[`benchware/WorstImageFormat`](https://github.com/benchware/WorstImageFormat)
-repository by GitHub-hosted runners are eligible. The intended signed surface is
+[`ivanmj124/WorstImageFormat`](https://github.com/ivanmj124/WorstImageFormat)
+repository by GitHub-hosted runners are eligible. The canonical source is
+hosted at [`ivanm12453/WorstImageFormat`](https://gitlab.com/ivanm12453/WorstImageFormat). The intended signed surface is
 the Windows native SDK archive, including WIMF-owned DLL and executable files.
 Vendored upstream binaries are not signed as WIMF components.
 
