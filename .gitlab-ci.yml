@@ -1,0 +1,379 @@
+# GitLab CI for WorstImageFormat (WIMF).
+#
+# Ported from .github/workflows/ci.yml and tuning.yml. The GitHub workflows are
+# left in place; this file is what gitlab.com actually runs.
+#
+# Runner notes:
+#   * gitlab.com shared runners are Linux-only. Jobs tagged `windows` / `macos`
+#     are manual and will sit idle until you register runners with those tags.
+#   * The Windows jobs assume `cl` is already on PATH (start the runner from a
+#     Visual Studio developer shell) and that bash is available.
+#
+# Deliberately not ported (GitHub-specific):
+#   * codeql.yml            GitHub CodeQL. Use GitLab SAST/Semgrep, or keep
+#                           CodeQL running on GitHub until the account is back.
+#   * signpath.yml          SignPath's GitHub Action. Needs a custom API job.
+#   * python-publish.yml    PyPI trusted publishing via GitHub OIDC. Add a
+#   * testpypi-publish.yml  manual deploy job with PYPI_API_TOKEN when you
+#                           actually cut a release.
+
+stages:
+  - quality
+  - test
+  - native
+  - report
+  - package
+
+default:
+  interruptible: true
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+.pip_cache:
+  cache:
+    key:
+      files:
+        - pyproject.toml
+        - setup.py
+    paths:
+      - .cache/pip
+
+.python_env:
+  extends: .pip_cache
+  before_script:
+    - python -m pip install --upgrade pip
+    - python -m pip install pytest pybind11 numpy pillow zstandard setuptools wheel
+
+.on_branch_or_mr:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+# ── quality ────────────────────────────────────────────────────────────────
+
+quality:
+  extends:
+    - .pip_cache
+    - .on_branch_or_mr
+  stage: quality
+  image: python:3.12
+  script:
+    - python -m pip install ruff mypy numpy pillow zstandard
+    - python -m ruff check wimf tests benchmarks examples setup.py --output-format=gitlab
+    - python -m ruff format wimf tests benchmarks examples setup.py --check
+    - python -m mypy wimf --ignore-missing-imports --no-strict-optional --python-version 3.12
+
+# ── Python tests ───────────────────────────────────────────────────────────
+
+test:linux:
+  extends:
+    - .python_env
+    - .on_branch_or_mr
+  stage: test
+  image: python:$PYTHON
+  parallel:
+    matrix:
+      - PYTHON: ["3.10", "3.12", "3.14"]
+  script:
+    - python setup.py build_ext --inplace
+    - python -c "import wimf.wimf_cpp, wimf.wimf_v2_cpp; assert wimf.runtime_info()['native']"
+    - >-
+      python -m pytest
+      wimf/test_core.py wimf/test_v2.py wimf/test_features.py wimf/test_studio.py
+      wimf/test_conformance.py wimf/test_extension_conformance.py
+      wimf/test_pillow_plugin.py wimf/test_transport.py
+      tests/test_integration_assets.py -v --junitxml=test-results.xml
+  artifacts:
+    when: always
+    expire_in: 14 days
+    reports:
+      junit: test-results.xml
+    paths:
+      - test-results.xml
+      - tests/conformance/*.json
+
+test:macos:
+  extends: .python_env
+  stage: test
+  tags: [macos]
+  when: manual
+  allow_failure: true
+  variables:
+    PYTHON: "3.12"
+  script:
+    - python3 setup.py build_ext --inplace
+    - python3 -c "import wimf.wimf_cpp, wimf.wimf_v2_cpp; assert wimf.runtime_info()['native']"
+    - python3 -m pytest wimf/test_core.py wimf/test_v2.py wimf/test_features.py wimf/test_studio.py wimf/test_conformance.py wimf/test_extension_conformance.py wimf/test_pillow_plugin.py wimf/test_transport.py tests/test_integration_assets.py -v
+
+test:windows:
+  extends: .python_env
+  stage: test
+  tags: [windows]
+  when: manual
+  allow_failure: true
+  script:
+    - python setup.py build_ext --inplace
+    - python -c "import wimf.wimf_cpp, wimf.wimf_v2_cpp; assert wimf.runtime_info()['native']"
+    - python -m pytest wimf/test_core.py wimf/test_v2.py wimf/test_features.py wimf/test_conformance.py wimf/test_extension_conformance.py wimf/test_pillow_plugin.py wimf/test_transport.py tests/test_integration_assets.py -v
+
+legacy-decode:
+  extends:
+    - .python_env
+    - .on_branch_or_mr
+  stage: test
+  image: python:3.12
+  script:
+    - python setup.py build_ext --inplace
+    - python -m pytest wimf/test_awif.py wimf/test_deprecations.py -v --junitxml=legacy-results.xml
+  artifacts:
+    when: always
+    expire_in: 14 days
+    reports:
+      junit: legacy-results.xml
+    paths:
+      - legacy-results.xml
+
+# ── native core ────────────────────────────────────────────────────────────
+
+.native_linux: &native_linux
+  - cc -O2 -Ithird_party/zstd -c third_party/zstd/zstd.c -o zstd.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -DWIMF_SIMD_ENABLE_AVX2 -Isrc -c src/v2_simd.cpp -o v2_simd.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v2_simd.cpp -o v2_simd_scalar.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -DWIMF_SIMD_ENABLE_AVX2 -Isrc -c src/v2_simd_avx2.cpp -o v2_simd_avx2.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v2_simd_neon.cpp -o v2_simd_neon.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v2_simd_crc.cpp -o v2_simd_crc.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v3_wavelet.cpp -o v3_wavelet.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v3_core.cpp -o v3_core.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -Ithird_party/zstd -c src/v2_core.cpp -o v2_core.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -Ithird_party/zstd tests/cpp/test_v2_core.cpp v2_core.o v2_simd.o v2_simd_avx2.o v2_simd_neon.o v2_simd_crc.o zstd.o -pthread -o v2_core_tests
+  - ./v2_core_tests
+  - c++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation -Isrc -Ithird_party/zstd tests/cpp/test_v3_core.cpp v3_core.o v3_wavelet.o v2_core.o v2_simd.o v2_simd_avx2.o v2_simd_neon.o v2_simd_crc.o zstd.o -pthread -o v3_core_tests
+  - ./v3_core_tests
+  - c++ -std=c++17 -O2 -Wall -Wextra -DWIMF_SIMD_ENABLE_AVX2 -Isrc tests/cpp/test_v2_simd.cpp v2_simd.o v2_simd_avx2.o v2_simd_neon.o v2_simd_crc.o -o v2_simd_tests
+  - ./v2_simd_tests
+  - c++ -std=c++17 -O2 -Wall -Wextra -Isrc tests/cpp/test_v2_simd.cpp v2_simd_scalar.o v2_simd_neon.o v2_simd_crc.o -o v2_simd_scalar_tests
+  - ./v2_simd_scalar_tests
+  - c++ -std=c++17 -O2 -Wall -Wextra -DWIMF_SIMD_ENABLE_AVX2 -Isrc -Ithird_party/zstd tools/wimf_simd_bench.cpp src/v2_core.cpp v2_simd.o v2_simd_avx2.o v2_simd_neon.o v2_simd_crc.o zstd.o -pthread -o wimf-simd-bench
+  - ./wimf-simd-bench > simd-bench.md
+  - cc -std=c11 -O2 -Wall -Wextra -Isrc -c tests/cpp/test_c_api.c -o test_c_api.o
+  - c++ -std=c++17 -O2 -Wall -Wextra -Isrc -Ithird_party/zstd test_c_api.o src/wimf_c.cpp src/v2_core.cpp v2_simd.o v2_simd_avx2.o v2_simd_neon.o v2_simd_crc.o zstd.o -pthread -o c_api_tests
+  - ./c_api_tests
+  - cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DWIMF_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+  - cmake --build cmake-build --config Release
+  - ctest --test-dir cmake-build --build-config Release --output-on-failure
+  - cmake --install cmake-build --config Release --prefix "$PWD/cmake-install"
+  - cmake -S tests/cmake-consumer -B consumer-build -DCMAKE_PREFIX_PATH="$PWD/cmake-install" -DCMAKE_BUILD_TYPE=Release
+  - cmake --build consumer-build --config Release
+  - cmake --build cmake-build --config Release --target package
+
+native:core:linux:
+  extends: .on_branch_or_mr
+  stage: native
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends build-essential cmake
+  script: *native_linux
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - simd-bench.md
+      - cmake-build/WIMF-SDK-*
+
+native:core:macos:
+  stage: native
+  tags: [macos]
+  when: manual
+  allow_failure: true
+  script: *native_linux
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - simd-bench.md
+      - cmake-build/WIMF-SDK-*
+
+native:core:windows:
+  stage: native
+  tags: [windows]
+  when: manual
+  allow_failure: true
+  script:
+    # Requires a runner started from a Visual Studio developer shell so cl/link
+    # are on PATH. See the file header.
+    - cl /nologo /O2 /c /Ithird_party/zstd third_party/zstd/zstd.c /Fo:zstd.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /arch:AVX2 /DWIMF_SIMD_ENABLE_AVX2 /Isrc /c src/v2_simd_avx2.cpp /Fo:v2_simd_avx2.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /DWIMF_SIMD_ENABLE_AVX2 /Isrc /c src/v2_simd.cpp /Fo:v2_simd.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /c src/v2_simd.cpp /Fo:v2_simd_scalar.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /c src/v2_simd_neon.cpp /Fo:v2_simd_neon.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /c src/v2_simd_crc.cpp /Fo:v2_simd_crc.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /Ithird_party/zstd /c src/v2_core.cpp /Fo:v2_core.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /c src/v3_wavelet.cpp /Fo:v3_wavelet.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /c src/v3_core.cpp /Fo:v3_core.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /Ithird_party/zstd /c tests/cpp/test_v2_core.cpp /Fo:test_v2_core.obj
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /Ithird_party/zstd /c tests/cpp/test_v3_core.cpp /Fo:test_v3_core.obj
+    - link /nologo test_v2_core.obj v2_core.obj v2_simd.obj v2_simd_avx2.obj v2_simd_neon.obj v2_simd_crc.obj zstd.obj /OUT:v2_core_tests.exe
+    - ./v2_core_tests.exe
+    - link /nologo test_v3_core.obj v3_core.obj v3_wavelet.obj v2_core.obj v2_simd.obj v2_simd_avx2.obj v2_simd_neon.obj v2_simd_crc.obj zstd.obj /OUT:v3_core_tests.exe
+    - ./v3_core_tests.exe
+    - cl /nologo /std:c++17 /EHsc /O2 /DWIMF_SIMD_ENABLE_AVX2 /Isrc /c tests/cpp/test_v2_simd.cpp /Fo:test_v2_simd.obj
+    - link /nologo test_v2_simd.obj v2_simd.obj v2_simd_avx2.obj v2_simd_neon.obj v2_simd_crc.obj /OUT:v2_simd_tests.exe
+    - ./v2_simd_tests.exe
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /c tests/cpp/test_v2_simd.cpp /Fo:test_v2_simd_scalar.obj
+    - link /nologo test_v2_simd_scalar.obj v2_simd_scalar.obj v2_simd_neon.obj v2_simd_crc.obj /OUT:v2_simd_scalar_tests.exe
+    - ./v2_simd_scalar_tests.exe
+    - cl /nologo /std:c++17 /EHsc /O2 /DWIMF_SIMD_ENABLE_AVX2 /Isrc /c tools/wimf_simd_bench.cpp /Fo:wimf_simd_bench.obj
+    - link /nologo wimf_simd_bench.obj v2_core.obj v2_simd.obj v2_simd_avx2.obj v2_simd_neon.obj v2_simd_crc.obj zstd.obj /OUT:wimf-simd-bench.exe
+    - ./wimf-simd-bench.exe > simd-bench.md
+    - cl /nologo /std:c++17 /EHsc /O2 /Isrc /Ithird_party/zstd /c src/wimf_c.cpp /Fo:wimf_c.obj
+    - cl /nologo /O2 /Isrc /c tests/cpp/test_c_api.c /Fo:test_c_api.obj
+    - link /nologo test_c_api.obj wimf_c.obj v2_core.obj v2_simd.obj v2_simd_avx2.obj v2_simd_neon.obj v2_simd_crc.obj zstd.obj /OUT:c_api_tests.exe
+    - ./c_api_tests.exe
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - simd-bench.md
+
+wasm-core:
+  extends: .on_branch_or_mr
+  stage: native
+  image: emscripten/emsdk:latest
+  script:
+    - emcc -O2 -Ithird_party/zstd -c third_party/zstd/zstd.c -o zstd-wasm.o
+    - em++ -std=c++17 -O2 -fexceptions -Isrc -c src/v2_simd.cpp -o v2_simd-wasm.o
+    - em++ -std=c++17 -O2 -fexceptions -Isrc -c src/v2_simd_avx2.cpp -o v2_simd_avx2-wasm.o
+    - em++ -std=c++17 -O2 -fexceptions -Isrc -c src/v2_simd_neon.cpp -o v2_simd_neon-wasm.o
+    - em++ -std=c++17 -O2 -fexceptions -Isrc -c src/v2_simd_crc.cpp -o v2_simd_crc-wasm.o
+    - em++ -std=c++17 -O2 -fexceptions -Isrc -Ithird_party/zstd tests/cpp/test_v2_core.cpp src/v2_core.cpp v2_simd-wasm.o v2_simd_avx2-wasm.o v2_simd_neon-wasm.o v2_simd_crc-wasm.o zstd-wasm.o -sDISABLE_EXCEPTION_CATCHING=0 -sEXIT_RUNTIME=1 -sENVIRONMENT=node -sWASM_ASYNC_COMPILATION=0 -sALLOW_MEMORY_GROWTH=1 -o wimf-wasm-tests.js
+    - node wimf-wasm-tests.js
+
+native:sanitizers:
+  extends: .on_branch_or_mr
+  stage: native
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends build-essential
+  script:
+    - cc -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -Ithird_party/zstd -c third_party/zstd/zstd.c -o zstd.o
+    - >-
+      c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
+      -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v2_simd.cpp -o v2_simd.o
+    - >-
+      c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
+      -Wall -Wextra -DWIMF_SIMD_ENABLE_AVX2 -Isrc -c src/v2_simd_avx2.cpp -o v2_simd_avx2.o
+    - >-
+      c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
+      -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v2_simd_neon.cpp -o v2_simd_neon.o
+    - >-
+      c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
+      -Wall -Wextra -Wno-misleading-indentation -Isrc -c src/v2_simd_crc.cpp -o v2_simd_crc.o
+    - >-
+      c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
+      -Wall -Wextra -Wno-misleading-indentation -Isrc -Ithird_party/zstd
+      tests/cpp/fuzz_v2_parser.cpp src/v2_core.cpp v2_simd.o v2_simd_avx2.o v2_simd_neon.o v2_simd_crc.o zstd.o -pthread -o fuzz_v2_parser
+    - ./fuzz_v2_parser
+
+# ── reports ────────────────────────────────────────────────────────────────
+
+visual-report:
+  extends:
+    - .on_branch_or_mr
+  stage: report
+  image: python:3.12
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends xvfb libgl1
+    - python -m pip install --upgrade pip
+    - python -m pip install pytest pybind11 numpy pillow zstandard setuptools wheel
+  script:
+    - python setup.py build_ext --inplace
+    - python tests/generate_ci_report.py --input .github/assets/dark.png --output codec-report-wim2 --format 2
+    - python tests/generate_ci_report.py --input .github/assets/dark.png --output codec-report-wim3 --format 3
+    - xvfb-run -a python tests/generate_studio_screenshots.py codec-report-wim2/studio
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - codec-report-wim2/
+      - codec-report-wim3/
+
+codec-benchmark:linux:
+  extends:
+    - .python_env
+    - .on_branch_or_mr
+  stage: report
+  image: python:3.12
+  allow_failure: true
+  script:
+    - python setup.py build_ext --inplace
+    - python benchmarks/bench_codecs.py --still-size 512 > codec-benchmark.json
+    - python benchmarks/codec_summary.py codec-benchmark.json
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - codec-benchmark.json
+
+# ── packaging ──────────────────────────────────────────────────────────────
+
+package:sdist:
+  extends:
+    - .pip_cache
+    - .on_branch_or_mr
+  stage: package
+  image: python:3.12
+  script:
+    - python -m pip install build twine
+    - python -m build --sdist
+    - python -m twine check dist/*
+  artifacts:
+    expire_in: 14 days
+    paths:
+      - dist/*.tar.gz
+
+# ── manual RD tuning sweep (was workflow_dispatch) ─────────────────────────
+
+tuning:sweep:
+  stage: report
+  image: ubuntu:24.04
+  when: manual
+  allow_failure: true
+  parallel:
+    matrix:
+      - CONFIG:
+          - "stock|1.5|16.0"
+          - "steep-ladder|2.5|16.0"
+          - "flat-ladder|1.0|8.0"
+          - "wide-range|3.0|8.0"
+          - "size-biased|2.0|32.0"
+          - "deep-divisor|1.5|24.0"
+          - "gentle-divisor|1.5|4.0"
+          - "steepest|3.5|16.0"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends build-essential
+  script:
+    - LABEL=${CONFIG%%|*}
+    - REST=${CONFIG#*|}
+    - SCALE=${REST%%|*}
+    - DIVISOR=${REST#*|}
+    - >-
+      g++ -std=c++17 -O2 -Wall -Wextra -Wno-misleading-indentation
+      -DWIMF_SIMD_ENABLE_AVX2
+      "-DWIMF_LADDER_SCALE=$SCALE" "-DWIMF_SCORING_DIVISOR=$DIVISOR"
+      -Isrc -Ithird_party/zstd
+      tools/wimf_rd_sweep.cpp src/v2_core.cpp
+      src/v2_simd.cpp src/v2_simd_avx2.cpp src/v2_simd_neon.cpp src/v2_simd_crc.cpp
+      third_party/zstd/zstd.c -pthread -o rd-sweep
+    - ./rd-sweep > "rd-$LABEL.md"
+    - echo "scale=$SCALE divisor=$DIVISOR"
+    - cat "rd-$LABEL.md"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - "rd-*.md"
