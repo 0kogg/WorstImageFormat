@@ -1,0 +1,72 @@
+name: Debug segfault
+
+on:
+  push:
+    paths:
+      - ".github/workflows/debug-segfault.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    name: ubuntu-latest / Python 3.14 debug
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Environment
+        run: |
+          uname -a
+          echo "nproc=$(nproc)"
+          lscpu
+          free -m
+          ldd --version | head -1
+          gcc --version | head -1
+          cat /proc/sys/kernel/core_pattern || true
+          cat /proc/sys/vm/mmap_rnd_bits || true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install pytest pybind11 numpy pillow zstandard setuptools wheel
+      - name: Build native extensions
+        run: python setup.py build_ext --inplace
+      - name: Isolated failing test
+        continue-on-error: true
+        run: |
+          set +e
+          python -m pytest wimf/test_features.py -v
+          echo "isolated_exit=$?"
+      - name: Full suite under gdb
+        continue-on-error: true
+        run: |
+          set +e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdb
+          ulimit -c unlimited || true
+          cat > /tmp/gdb.cmds <<'GDB'
+          set pagination off
+          set confirm off
+          set print thread-events off
+          handle SIGSEGV stop print nopass
+          handle SIGABRT stop print nopass
+          run
+          echo \n===== BACKTRACE (crashing thread) =====\n
+          bt 50
+          echo \n===== ALL THREADS =====\n
+          thread apply all bt 25
+          echo \n===== REGISTERS =====\n
+          info registers
+          echo \n===== SHARED LIBRARIES =====\n
+          info sharedlibrary
+          quit
+          GDB
+          gdb -batch -x /tmp/gdb.cmds --args python -m pytest wimf/test_core.py wimf/test_v2.py wimf/test_features.py wimf/test_studio.py wimf/test_conformance.py wimf/test_extension_conformance.py wimf/test_pillow_plugin.py wimf/test_transport.py tests/test_integration_assets.py -v
+          echo "gdb_exit=$?"
+      - name: Full suite plain (confirm failure)
+        continue-on-error: true
+        run: |
+          set +e
+          python -m pytest wimf/test_core.py wimf/test_v2.py wimf/test_features.py wimf/test_studio.py wimf/test_conformance.py wimf/test_extension_conformance.py wimf/test_pillow_plugin.py wimf/test_transport.py tests/test_integration_assets.py -v
+          echo "plain_exit=$?"
