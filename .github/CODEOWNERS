@@ -1,4 +1,4 @@
-/.github/workflows/signpath.yml @ivanmj124 @ivanm12453
-/.github/CODEOWNERS @ivanmj124 @ivanm12453
-/CODE_SIGNING.md @ivanmj124 @ivanm12453
-/cmake/wimf_version.rc.in @ivanmj124 @ivanm12453
+/.github/workflows/signpath.yml @ivanmj124
+/.github/CODEOWNERS @ivanmj124
+/CODE_SIGNING.md @ivanmj124
+/cmake/wimf_version.rc.in @ivanmj124

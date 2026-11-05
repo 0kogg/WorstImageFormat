@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "wimf"
 version = "3.0.0"
 authors = [
-  { name="BenchWare", email="ivanm12453@gmail.com" },
+  { name="BenchWare", email="okogg@proton.me" },
 ]
 description = "WIM3/WIM2 hybrid image codec with a Python frontend and portable C++ core"
 readme = "README.md"

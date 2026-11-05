@@ -21,7 +21,7 @@ Use the project's private reporting channel:
 - **GitHub mirror:** use **Security → Report a vulnerability** on
   <https://github.com/ivanmj124/WorstImageFormat> if private vulnerability
   reporting is enabled.
-- **Email:** <ivanm12453@gmail.com>.
+- **Email:** <okogg@proton.me>.
 
 Include, when possible:
 
