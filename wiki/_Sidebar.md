@@ -5,6 +5,7 @@
 - [[Python-API]]
 - [[Command-Line-Tools]]
 - [[WIMF-Studio]]
+- [[WIM3-Format]]
 - [[WIM2-Format]]
 - [[Conformance-Vectors]]
 - [[Corruption-and-Recovery]]

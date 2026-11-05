@@ -1,0 +1,24 @@
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.bmp binary
+*.gif binary
+*.ttf binary
+*.otf binary
+*.so binary
+*.pyd binary
+*.dll binary
+*.dylib binary
+*.wimf binary
+*.awif binary
+*.wif binary
+
+# Keep the language bar meaningful: vendored code and docs are not ours.
+third_party/** linguist-vendored
+docs/** linguist-documentation
+wiki/** linguist-documentation
+benchmarkinfo/** linguist-documentation
+.github/assets/** linguist-documentation

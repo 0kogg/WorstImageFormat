@@ -9,6 +9,6 @@ legacy = wimf.open("legacy.wif")
 wimf.save("current.wimf", legacy.pil, lossless=True)
 ```
 
-The `.wif` extension was only a filename alias. Use `.wimf` for new WIM2 files.
+The `.wif` extension was only a filename alias. Use `.wimf` for new files; choose WIM2 (`format_version=2`) when you need anti-rot protection or chrono history.
 
 For AWIF, decode states and either export individual frames or store them as WIM2 chrono history. Chrono history is indexed image history, not a timed animation replacement.

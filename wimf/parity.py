@@ -124,7 +124,9 @@ def verify_and_repair(data):
     # put it all back together
     new_payload = bytearray()
     for i in range(num_chunks):
-        target_size = min(chunk_size, orig_len - i * chunk_size)
+        # Clamp to zero: a short final chunk can start beyond the original
+        # length, which would otherwise produce a negative slice.
+        target_size = max(0, min(chunk_size, orig_len - i * chunk_size))
         if i == broken_idx:
             new_payload.extend(repaired_chunk[:target_size].tobytes())
         else:

@@ -1,5 +1,9 @@
 # WIMF roadmap
 
+> This roadmap predates WIM3 and tracks WIM2 codec correctness, integration, and
+> adoption work. WIM3 status and remaining work are documented in the
+> [WIM3 specification](https://gitlab.com/ivanm12453/WorstImageFormat/-/blob/main/docs/wim3-format.md).
+
 WIM2 codec correctness and native CPU performance come first. The next major
 goal is adoption: making the decoder straightforward for other applications to
 embed without depending on Python.

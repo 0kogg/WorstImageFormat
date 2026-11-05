@@ -6,12 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "wimf"
 version = "3.0.0"
 authors = [
-  { name="BenchWare", email="ivanm12453@gmail.com" },
+  { name="BenchWare", email="okogg@proton.me" },
 ]
-description = "WIM2 hybrid image codec with a Python frontend and portable C++ core"
+description = "WIM3/WIM2 hybrid image codec with a Python frontend and portable C++ core"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.10"
+keywords = ["image", "image-format", "codec", "compression", "wavelet", "lossless"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -42,11 +43,12 @@ wimf-meta = "wimf.meta_tool:main"
 wimf-cat = "wimf.cat:main"
 
 [project.urls]
-"Homepage" = "https://github.com/benchware/WorstImageFormat"
-"Documentation" = "https://github.com/benchware/WorstImageFormat/tree/main/docs"
-"Issues" = "https://github.com/benchware/WorstImageFormat/issues"
-"Changelog" = "https://github.com/benchware/WorstImageFormat/blob/main/CHANGELOG.md"
-"Source" = "https://github.com/benchware/WorstImageFormat"
+"Homepage" = "https://gitlab.com/ivanm12453/WorstImageFormat"
+"Documentation" = "https://gitlab.com/ivanm12453/WorstImageFormat/-/tree/main/docs"
+"Issues" = "https://gitlab.com/ivanm12453/WorstImageFormat/-/issues"
+"Changelog" = "https://gitlab.com/ivanm12453/WorstImageFormat/-/blob/main/CHANGELOG.md"
+"Source" = "https://gitlab.com/ivanm12453/WorstImageFormat"
+"Mirror" = "https://github.com/ivanmj124/WorstImageFormat"
 
 [tool.setuptools.packages.find]
 where = ["."]
