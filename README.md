@@ -2,14 +2,14 @@
 
 [![PyPI](https://img.shields.io/pypi/v/wimf.svg)](https://pypi.org/project/wimf/)
 [![Python](https://img.shields.io/pypi/pyversions/wimf.svg)](https://pypi.org/project/wimf/)
-[![CI](https://github.com/benchware/WorstImageFormat/actions/workflows/ci.yml/badge.svg)](https://github.com/benchware/WorstImageFormat/actions/workflows/ci.yml)
-[![License](https://img.shields.io/pypi/l/wimf.svg)](https://github.com/benchware/WorstImageFormat/blob/main/LICENSE)
+[![CI](https://github.com/Orrikane/WorstImageFormat/actions/workflows/ci.yml/badge.svg)](https://github.com/benchware/WorstImageFormat/actions/workflows/ci.yml)
+[![License](https://img.shields.io/pypi/l/wimf.svg)](https://github.com/Orrikane/WorstImageFormat/blob/main/LICENSE)
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/benchware/WorstImageFormat/main/.github/assets/white.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/benchware/WorstImageFormat/main/.github/assets/dark.png">
-    <img alt="Worst Image Format" src="https://raw.githubusercontent.com/benchware/WorstImageFormat/main/.github/assets/dark.png" width="500">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Orrikane/WorstImageFormat/main/.github/assets/white.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Orrikane/WorstImageFormat/main/.github/assets/dark.png">
+    <img alt="Worst Image Format" src="https://raw.githubusercontent.com/Orrikane/WorstImageFormat/main/.github/assets/dark.png" width="500">
   </picture>
 </p>
 
