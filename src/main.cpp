@@ -164,7 +164,10 @@ extern "C" {
         uint64_t sum = 0;
         size_t i = 0;
         #ifdef WIMF_X86
-        for (; i <= size - 32; i += 32) {
+        // Compare as i + 32 <= size, not i <= size - 32: the subtraction
+        // underflows for buffers smaller than one vector and lets the loop
+        // run with an out-of-bounds index.
+        for (; i + 32 <= size; i += 32) {
             __m256i v = _mm256_loadu_si256((const __m256i*)&data[i]);
             __m256i zero = _mm256_setzero_si256();
             __m256i sad = _mm256_sad_epu8(v, zero);
@@ -181,13 +184,15 @@ extern "C" {
     void block_xor_raw(uint8_t* target, const uint8_t* source, size_t size) {
         size_t i = 0;
         #ifdef WIMF_X86
-        for (; i <= size - 32; i += 32) {
+        // Same underflow guard as calculate_checksum_raw: a short buffer must
+        // fall straight through to the scalar tail instead of wrapping.
+        for (; i + 32 <= size; i += 32) {
             __m256i v0 = _mm256_loadu_si256((__m256i*)&target[i]);
             __m256i v1 = _mm256_loadu_si256((const __m256i*)&source[i]);
             _mm256_storeu_si256((__m256i*)&target[i], _mm256_xor_si256(v0, v1));
         }
         #elif defined(WIMF_ARM)
-        for (; i <= size - 16; i += 16) {
+        for (; i + 16 <= size; i += 16) {
             uint8x16_t v0 = vld1q_u8(&target[i]);
             uint8x16_t v1 = vld1q_u8(&source[i]);
             vst1q_u8(&target[i], veorq_u8(v0, v1));
